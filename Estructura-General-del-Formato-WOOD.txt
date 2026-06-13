@@ -1,0 +1,147 @@
+## Estructura General del Formato WOOD
+El objeto raíz de WOOD contendrá la versión del formato, la fuente (tu herramienta de escaneo) y tres arreglos principales: Resonators (Personajes), Weapons (Armas) y Echoes (Artefactos).
+
+1. Raíz (IWOOD)
+format: "WOOD" (Cadena estática para validación).
+
+version: 1 (Entero para manejar futuras migraciones).
+
+source: Cadena (Ej. "WuWaScanner").
+
+resonators: Arreglo de objetos IResonator.
+
+weapons: Arreglo de objetos IWeapon.
+
+echoes: Arreglo de objetos IEcho.
+
+2. Resonator (IResonator)
+A diferencia de Genshin, en Wuthering Waves los talentos se dividen en un árbol (Forte). Para la exportación, lo simplificaremos a los nodos principales.
+
+key: Cadena (Ej. "RoverHavoc", "Verina").
+
+level: Entero (1-90).
+
+ascension: Entero (0-6).
+
+resonanceChain: Entero (0-6). Equivale a las constelaciones.
+
+skills: Objeto con los niveles (1-10) de:
+
+basic (Ataque Básico)
+
+skill (Habilidad de Resonancia)
+
+forte (Circuito Forte)
+
+liberation (Liberación de Resonancia / Ultimate)
+
+intro (Habilidad de Intro)
+
+3. Arma (IWeapon)
+Basado en tu ejemplo de Emerald of Genesis. En lugar de "Refinement", usaremos "Tuning" (Sintonización), que en WuWa va del 1 al 5.
+
+key: Cadena (Ej. "EmeraldOfGenesis").
+
+level: Entero (1-90).
+
+ascension: Entero (0-6).
+
+tuning: Entero (1-5). Equivale a refinement (R1 = 1).
+
+location: Cadena con el key del Resonator que la tiene equipada (Vacío "" si está en el inventario).
+
+lock: Booleano (Si el jugador la tiene bloqueada).
+
+4. Echo (IEcho)
+Aquí está la verdadera evolución respecto a GOOD. Eliminamos el slotKey (flor, pluma) e introducimos el echoKey (el monstruo en sí) y el cost.
+
+echoKey: Cadena (Ej. "Dreamless", "Tambourinist"). Esto es vital porque la habilidad activa depende de este ID.
+
+setKey: Cadena (Ej. "HavocEclipse", "FreezingFrost"). El efecto de Sonata.
+
+cost: Entero (4, 3, 1). Define el peso en la build.
+
+rarity: Entero (2-5). Por ahora solo usaremos 5.
+
+level: Entero (0-25).
+
+mainStatKey: Cadena (Ej. "critRate_", "havoc_dmg_"). El guion bajo _ indica porcentaje.
+
+substats: Arreglo de objetos con key y value.
+
+location: Cadena (A quién pertenece).
+
+lock: Booleano.
+
+## Ejemplo de Exportación (WOOD.json)
+Este es el JSON resultante que tu script de automatización generaría, integrando a tu Rover, el arma Emerald of Genesis y al Echo Dreamless. Es limpio, escalable y no guarda la "lógica pesada" del juego, dejándole ese trabajo al motor del optimizador.
+
+JSON
+{
+  "format": "WOOD",
+  "version": 1,
+  "source": "LuisAutoScanner",
+  "resonators": [
+    {
+      "key": "RoverHavoc",
+      "level": 90,
+      "ascension": 6,
+      "resonanceChain": 6,
+      "skills": {
+        "basic": 8,
+        "skill": 10,
+        "forte": 10,
+        "liberation": 10,
+        "intro": 8
+      }
+    }
+  ],
+  "weapons": [
+    {
+      "key": "EmeraldOfGenesis",
+      "level": 90,
+      "ascension": 6,
+      "tuning": 1,
+      "location": "RoverHavoc",
+      "lock": true
+    }
+  ],
+  "echoes": [
+    {
+      "echoKey": "Dreamless",
+      "setKey": "HavocEclipse",
+      "cost": 4,
+      "rarity": 5,
+      "level": 25,
+      "mainStatKey": "critDMG_",
+      "substats": [
+        { "key": "critRate_", "value": 10.5 },
+        { "key": "atk_", "value": 11.6 },
+        { "key": "enerRech_", "value": 9.2 },
+        { "key": "resonance_liberation_dmg_", "value": 10.1 },
+        { "key": "atk", "value": 40 }
+      ],
+      "location": "RoverHavoc",
+      "lock": true
+    },
+    {
+      "echoKey": "Tambourinist",
+      "setKey": "HavocEclipse",
+      "cost": 3,
+      "rarity": 5,
+      "level": 25,
+      "mainStatKey": "havoc_dmg_",
+      "substats": [
+        { "key": "critRate_", "value": 8.1 },
+        { "key": "critDMG_", "value": 14.2 },
+        { "key": "hp_", "value": 9.4 },
+        { "key": "def", "value": 30 },
+        { "key": "basic_attack_dmg_", "value": 8.6 }
+      ],
+      "location": "RoverHavoc",
+      "lock": false
+    }
+  ]
+}
+## Consideraciones de Diseño para la Base de Datos Interna
+Cuando importes este WOOD a la base de datos de tu frontend (el equivalente al good-database-todo.json), la aplicación le inyectará IDs únicos (id: "echo_1", id: "weapon_2") para poder referenciarlos en los equipos y guardará el estado de las configuraciones y condicionales (por ejemplo, si el buff del Emerald of Genesis está activo con 1 o 2 stacks). Pero para la capa de exportación/importación, esta estructura es todo lo que necesitas para empezar a calcular daño.
