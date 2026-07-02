@@ -1,0 +1,1 @@
+y si en vez de usar un cuadrado perfecto, simplemente usamos el rectángulo resultante estandarizado un ejemplo,usamos una resolución de 200x200 - 0x80(40%), es un cuadrado final de 200x120 como ejemplo
