@@ -1,75 +1,95 @@
-import { useState, useRef } from 'react';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
+import { useState } from 'react';
+
+export type VideoResolution = '480' | '720' | '1080' | 'original';
 
 export const useFFmpeg = () => {
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const ffmpegRef = useRef(new FFmpeg());
 
   const loadFFmpeg = async () => {
-    const ffmpeg = ffmpegRef.current;
-    if (ffmpeg.loaded) {
-        setIsLoaded(true);
-        return;
-    }
-
-    ffmpeg.on('progress', ({ progress }) => {
-      setProgress(progress * 100);
-    });
-
-    try {
-        await ffmpeg.load({
-            coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js",
-            wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm",
-        });
-        setIsLoaded(true);
-        console.log("🎬 FFmpeg cargado exitosamente.");
-    } catch (error) {
-        console.error("Error cargando FFmpeg:", error);
-    }
+    setIsLoaded(true);
+    console.log('🎬 Modo nativo del navegador activado');
   };
 
-  const processVideo = async (file: File) => {
-    if (!isLoaded) await loadFFmpeg();
-    const ffmpeg = ffmpegRef.current;
-    
+  const processVideo = async (
+    file: File,
+    fps: number = 2,
+    resolution: VideoResolution = '720'
+  ): Promise<string[]> => {
     setIsProcessing(true);
     setProgress(0);
+    const frames: string[] = [];
 
     try {
-      const inputName = 'input.mp4';
-      await ffmpeg.writeFile(inputName, await fetchFile(file));
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(file);
+      video.muted = true;
+      video.playsInline = true;
 
-      console.log("Extrayendo frames a 2 FPS...");
-      await ffmpeg.exec([
-        '-i', inputName,
-        '-r', '2', 
-        '-f', 'image2',
-        'frame_%03d.jpg'
-      ]);
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = () => reject(new Error('No se pudo cargar el video'));
+        setTimeout(() => reject(new Error('Timeout')), 10000);
+      });
 
-      const frames = [];
-      let i = 1;
-      while (true) {
-        const frameName = `frame_${i.toString().padStart(3, '0')}.jpg`;
-        try {
-            const data = await ffmpeg.readFile(frameName);
-            const blob = new Blob([data], { type: 'image/jpeg' });
-            frames.push(URL.createObjectURL(blob));
-            await ffmpeg.deleteFile(frameName);
-            i++;
-        } catch (e) {
-            break; // No hay más frames
-        }
+      const duration = video.duration;
+      const interval = 1 / fps;
+      const totalFrames = Math.ceil(duration * fps);
+
+      // Calcular dimensiones según resolución elegida
+      const canvas = document.createElement('canvas');
+      const srcW = video.videoWidth;
+      const srcH = video.videoHeight;
+      const aspectRatio = srcW / srcH;
+
+      const targetHeights: Record<VideoResolution, number | null> = {
+        '480': 480,
+        '720': 720,
+        '1080': 1080,
+        'original': null,
+      };
+
+      const targetH = targetHeights[resolution];
+      if (targetH === null || srcH <= targetH) {
+        // Sin escalar (original o ya es menor)
+        canvas.width = srcW;
+        canvas.height = srcH;
+      } else {
+        canvas.height = targetH;
+        canvas.width = Math.round(targetH * aspectRatio);
       }
-      
-      await ffmpeg.deleteFile(inputName);
+
+      const ctx = canvas.getContext('2d')!;
+      let currentTime = 0;
+      let frameCount = 0;
+
+      console.log(`🎬 ${totalFrames} frames | ${fps} FPS | ${canvas.width}×${canvas.height} | ${duration.toFixed(1)}s`);
+
+      while (currentTime <= duration) {
+        video.currentTime = currentTime;
+
+        await new Promise<void>((resolve) => {
+          video.onseeked = () => resolve();
+          setTimeout(resolve, 500);
+        });
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        frames.push(canvas.toDataURL('image/jpeg', 0.93));
+
+        frameCount++;
+        setProgress(Math.min((frameCount / totalFrames) * 100, 99));
+        currentTime += interval;
+      }
+
+      URL.revokeObjectURL(video.src);
+      setProgress(100);
       setIsProcessing(false);
+      console.log(`✅ ${frames.length} frames extraídos`);
       return frames;
+
     } catch (error) {
-      console.error("Error procesando video:", error);
+      console.error('Error extrayendo frames:', error);
       setIsProcessing(false);
       return [];
     }
